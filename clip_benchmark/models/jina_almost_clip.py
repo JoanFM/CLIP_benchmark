@@ -52,8 +52,8 @@ class JinaModel:
 
     def encode_image(self, batch_images):
         batch_images['pixel_values'] = batch_images['pixel_values'].squeeze(1)
-        for t in batch_images.values():
-            t.to(self.device)
+        for k in batch_images.keys():
+            batch_images[k] = batch_images[k].to(self.device)
         generated_ids = self.blip_model.generate(**batch_images)
         generated_text = [text.strip() for text in self.processor.batch_decode(generated_ids, skip_special_tokens=True)]
         embeddings = self.text_encoder.encode(generated_text)
