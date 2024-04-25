@@ -5,7 +5,8 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5]):
+
+def evaluate(model, dataloader, tokenizer, device, amp=True, recall_k_list=[5]):
     """
     Evaluate the model on the given dataset
 
@@ -42,9 +43,12 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5])
     dataloader = dataloader_with_indices(dataloader)
     autocast = torch.cuda.amp.autocast if amp else suppress
     for batch_images, batch_texts, inds in tqdm(dataloader):
-        batch_images = batch_images.to(device)
+        # batch_images = batch_images.to(device)
         # tokenize all texts in the batch
-        batch_texts_tok = tokenizer([text for i, texts in enumerate(batch_texts) for text in texts]).to(device)
+        batch_texts_tok = tokenizer([text for i, texts in enumerate(batch_texts) for text in texts], padding=False,
+                                    truncation=True,
+                                    return_token_type_ids=False, )
+        # batch_texts_tok = tokenizer([text for i, texts in enumerate(batch_texts) for text in texts]).to(device)
         # store the index of image for each text
         batch_texts_image_index = [ind for ind, texts in zip(inds, batch_texts) for text in texts]
 
@@ -56,7 +60,7 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5])
         batch_images_emb_list.append(batch_images_emb.cpu())
         batch_texts_emb_list.append(batch_texts_emb.cpu())
         texts_image_index.extend(batch_texts_image_index)
-        
+
     batch_size = len(batch_images_emb_list[0])
 
     # concatenate all embeddings
@@ -64,7 +68,7 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5])
     texts_emb = torch.cat(batch_texts_emb_list)
 
     # get the score for each text and image pair
-    scores  = texts_emb @ images_emb.t()
+    scores = texts_emb @ images_emb.t()
 
     # construct a the positive pair matrix, which tells whether each text-image pair is a positive or not
     positive_pairs = torch.zeros_like(scores, dtype=bool)
@@ -80,18 +84,24 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True, recall_k_list=[5])
         # so we can easily compute that using the actual recall, by checking whether there is at least one true positive,
         # which would be the case if the recall is greater than 0. One we compute the recal for each image (or text), we average
         # it over the dataset.
-        metrics[f"image_retrieval_recall@{recall_k}"] = (batchify(recall_at_k, scores, positive_pairs, batch_size, device, k=recall_k)>0).float().mean().item()
-        metrics[f"text_retrieval_recall@{recall_k}"] = (batchify(recall_at_k, scores.T, positive_pairs.T, batch_size, device, k=recall_k)>0).float().mean().item()
+        metrics[f"image_retrieval_recall@{recall_k}"] = (
+                    batchify(recall_at_k, scores, positive_pairs, batch_size, device,
+                             k=recall_k) > 0).float().mean().item()
+        metrics[f"text_retrieval_recall@{recall_k}"] = (
+                    batchify(recall_at_k, scores.T, positive_pairs.T, batch_size, device,
+                             k=recall_k) > 0).float().mean().item()
 
     return metrics
+
 
 def dataloader_with_indices(dataloader):
     start = 0
     for x, y in dataloader:
-        end = start + len(x)
+        end = start + len(x['pixel_values'])
         inds = torch.arange(start, end)
         yield x, y, inds
         start = end
+
 
 def recall_at_k(scores, positive_pairs, k):
     """
@@ -111,10 +121,11 @@ def recall_at_k(scores, positive_pairs, k):
     # compute number of true positives
     positive_pairs_reshaped = positive_pairs.view(nb_texts, 1, nb_images)
     # a true positive means a positive among the topk
-    nb_true_positive = (topk_indices_onehot * positive_pairs_reshaped).sum(dim=(1,2))
+    nb_true_positive = (topk_indices_onehot * positive_pairs_reshaped).sum(dim=(1, 2))
     # compute recall at k
     recall_at_k = (nb_true_positive / nb_positive)
     return recall_at_k
+
 
 def batchify(func, X, Y, batch_size, device, *args, **kwargs):
     results = []
