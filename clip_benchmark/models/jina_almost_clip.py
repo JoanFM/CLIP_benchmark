@@ -4,6 +4,7 @@ import torch
 
 MODEL_NAME = 'jinaai/jina-embeddings-v2-base-en'
 BLIP2_MODEL_NAME = "Salesforce/blip2-flan-t5-xl"
+PROMPT = 'Describe this image in detail.'
 
 
 def mean_pooling(model_output, attention_mask):
@@ -29,7 +30,7 @@ class JinaModel:
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         self.processor = Blip2Processor.from_pretrained(BLIP2_MODEL_NAME)
         self.blip_model = Blip2ForConditionalGeneration.from_pretrained(
-           BLIP2_MODEL_NAME, torch_dtype=torch.float16
+            BLIP2_MODEL_NAME, torch_dtype=torch.float16
         )
         self.blip_model.to(device)
         self.blip_model.eval()
@@ -50,7 +51,7 @@ class JinaModel:
         return embeddings
 
     def encode_image(self, batch_images):
-        generated_ids = self.blip_model.generate(**batch_images)
+        generated_ids = self.blip_model.generate(**batch_images, prompt=PROMPT)
         generated_text = [text.strip() for text in self.processor.batch_decode(generated_ids, skip_special_tokens=True)]
         embeddings = self.text_encoder.encode(generated_text)
         return embeddings
