@@ -55,7 +55,7 @@ class JinaModel:
             batch_images[k] = batch_images[k].squeeze(1).to(self.device)
         generated_ids = self.blip_model.generate(**batch_images)
         generated_text = [text.strip() for text in self.processor.batch_decode(generated_ids, skip_special_tokens=True)]
-        embeddings = self.text_encoder.encode(generated_text)
+        embeddings = self.text_encoder.encode(generated_text, return_tensors='pt')
         return embeddings
 
 
