@@ -51,7 +51,7 @@ class JinaModel:
         return embeddings
 
     def encode_image(self, batch_images):
-        generated_ids = self.blip_model.generate(**batch_images, prompt=PROMPT)
+        generated_ids = self.blip_model.generate(**batch_images)
         generated_text = [text.strip() for text in self.processor.batch_decode(generated_ids, skip_special_tokens=True)]
         embeddings = self.text_encoder.encode(generated_text)
         return embeddings
@@ -63,4 +63,8 @@ def load_jina_almost_clip(device="cpu", *args, **kwargs):
         CLIP-like model with `encode_image` and `encode_text`"""
 
     model = JinaModel(device=device)
-    return model, model.processor, model.tokenizer
+
+    def transform(*args, **kwargs):
+        return model.processor(text=PROMPT, return_tensors="pt", *args, **kwargs)
+
+    return model, transform, model.tokenizer
